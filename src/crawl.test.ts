@@ -3,6 +3,8 @@ import {
   normalizeURL,
   getH1FromHTML,
   getFirstParagraphFromHTML,
+  getURLsFromHTML,
+  getImagesFromHTML,
 } from "./crawl";
 
 describe("normalizeURL", () => {
@@ -99,6 +101,95 @@ describe("getFirstParagraphFromHTML", () => {
     const inputBody = `<html><body><h1>Test Title</h1></body></html>`;
     const actual = getFirstParagraphFromHTML(inputBody);
     const expected = "";
+    expect(actual).toEqual(expected);
+  });
+});
+
+describe("getURLsFromHTML", () => {
+  it("should return absolute urls", () => {
+    const inputURL = "https://blog.boot.dev";
+    const inputBody = `<html><body><a href="https://blog.boot.dev"><span>Boot.dev</span></a></body></html>`;
+
+    const actual = getURLsFromHTML(inputBody, inputURL);
+    const expected = ["https://blog.boot.dev/"];
+
+    expect(actual).toEqual(expected);
+  });
+
+  it("should return relative urls as absolute urls", () => {
+    const inputURL = "https://blog.boot.dev";
+    const inputBody = `<html><body><a href="/path/one"><span>Boot.dev</span></a></body></html>`;
+
+    const actual = getURLsFromHTML(inputBody, inputURL);
+    const expected = ["https://blog.boot.dev/path/one"];
+
+    expect(actual).toEqual(expected);
+  });
+
+  it("should return empty array if no urls found", () => {
+    const inputURL = "https://blog.boot.dev";
+    const inputBody = `<html><body><p>I am not a link</p></body></html>`;
+
+    const actual = getURLsFromHTML(inputBody, inputURL);
+    const expected: string[] = [];
+
+    expect(actual).toEqual(expected);
+  });
+
+  it("should handle anchor tags with no href attribute", () => {
+    const inputURL = "https://blog.boot.dev";
+    const inputBody = `<html><body><a>Link without href</a></body></html>`;
+
+    const actual = getURLsFromHTML(inputBody, inputURL);
+    const expected: string[] = [];
+
+    expect(actual).toEqual(expected);
+  });
+});
+
+describe("getImagesFromHTML", () => {
+  it("should return absolute image urls", () => {
+    const inputURL = "https://blog.boot.dev";
+    const inputBody = `<html><body><img src="https://blog.boot.dev/logo.png" alt="Logo"></body></html>`;
+
+    const actual = getImagesFromHTML(inputBody, inputURL);
+    const expected = ["https://blog.boot.dev/logo.png"];
+
+    expect(actual).toEqual(expected);
+  });
+
+  it("should return absolute image urls given relative image urls", () => {
+    const inputURL = "https://blog.boot.dev";
+    const inputBody = `<html><body><img src="/logo.png" alt="Logo"></body></html>`;
+
+    const actual = getImagesFromHTML(inputBody, inputURL);
+    const expected = ["https://blog.boot.dev/logo.png"];
+
+    expect(actual).toEqual(expected);
+  });
+
+  it("should return all image urls if multiple urls found", () => {
+    const inputURL = "https://blog.boot.dev";
+    const inputBody =
+      `<html><body>` +
+      `<img src="/logo.png" alt="Logo">` +
+      `<img src="https://cdn.boot.dev/banner.jpg">` +
+      `</body></html>`;
+    const actual = getImagesFromHTML(inputBody, inputURL);
+    const expected = [
+      "https://blog.boot.dev/logo.png",
+      "https://cdn.boot.dev/banner.jpg",
+    ];
+    expect(actual).toEqual(expected);
+  });
+
+  it("should handle image tags with no src attribute", () => {
+    const inputURL = "https://blog.boot.dev";
+    const inputBody = `<html><body><img alt="Image without src"></body></html>`;
+
+    const actual = getImagesFromHTML(inputBody, inputURL);
+    const expected: string[] = [];
+
     expect(actual).toEqual(expected);
   });
 });

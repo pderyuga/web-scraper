@@ -42,3 +42,37 @@ export function getFirstParagraphFromHTML(html: string): string {
   const firstParagraph = paragraph?.textContent.trim() ?? "";
   return firstParagraph;
 }
+
+export function getURLsFromHTML(html: string, baseURL: string): string[] {
+  const links: string[] = [];
+  try {
+    const dom = new JSDOM(html, { url: baseURL });
+    const document = dom.window.document;
+    const linkElements = document.querySelectorAll("a");
+
+    linkElements.forEach((link) => {
+      if (link.href) links.push(link.href);
+    });
+  } catch (err) {
+    console.error("failed to parse HTML", err);
+  }
+
+  return links;
+}
+
+export function getImagesFromHTML(html: string, baseURL: string): string[] {
+  const images: string[] = [];
+  try {
+    const dom = new JSDOM(html, { url: baseURL });
+    const document = dom.window.document;
+    const imageElements = document.querySelectorAll("img");
+
+    imageElements.forEach((img) => {
+      if (img.src) images.push(img.src);
+    });
+  } catch (err) {
+    console.error("failed to parse HTML", err);
+  }
+
+  return images;
+}
