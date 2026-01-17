@@ -1,4 +1,5 @@
 import { JSDOM } from "jsdom";
+import pLimit, { type LimitFunction } from "p-limit";
 
 export function normalizeURL(url: string): string {
   const urlObj = new URL(url);
@@ -103,87 +104,120 @@ export function extractPageData(
   };
 }
 
-export async function getHTML(url: string) {
-  console.log(`Crawling ${url}...`);
+class ConcurrentCrawler {
+  baseURL: string;
+  pages: Record<string, number>;
+  limit: LimitFunction;
 
-  try {
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "User-Agent": "BootCrawler/1.0",
-      },
+  constructor(baseURL: string, maxConcurrency: number) {
+    this.baseURL = baseURL;
+    this.pages = {};
+    this.limit = pLimit(maxConcurrency);
+  }
+
+  private addPageVisit(normalizedURL: string): boolean {
+    // If the pages object already has an entry for the normalized version of the current URL
+    if (normalizedURL in this.pages) {
+      // increment the count
+      this.pages[normalizedURL]++;
+      // return false
+      return false;
+    }
+    // Otherwise, add an entry to the pages object for the normalized version of the current URL, and set the count to 1
+    this.pages[normalizedURL] = 1;
+    // return true
+    return true;
+  }
+
+  private async getHTML(currentURL: string): Promise<string> {
+    console.log(`Crawling ${currentURL}...`);
+    return await this.limit(async () => {
+      let response;
+      // same fetch logic and error handling as before
+      try {
+        response = await fetch(currentURL, {
+          method: "GET",
+          headers: {
+            "User-Agent": "BootCrawler/1.0",
+          },
+        });
+      } catch (err) {
+        throw new Error(`Got Network error: ${(err as Error).message}`);
+      }
+
+      if (response.status >= 400) {
+        throw new Error(
+          `Got HTTP error: ${response.status} ${response.statusText}`,
+        );
+      }
+
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("text/html")) {
+        throw new Error(`Got non-HTML response: ${contentType}`);
+      }
+
+      const htmlText = await response.text();
+
+      // Extract just the body content
+      const dom = new JSDOM(htmlText);
+      const body = dom.window.document.body;
+
+      return body ? body.outerHTML : htmlText;
+    });
+  }
+
+  private async crawlPage(currentURL: string): Promise<void> {
+    // Make sure the currentURL is on the same domain as the baseURL
+    const baseUrlObj = new URL(this.baseURL);
+    const currentUrlObj = new URL(currentURL);
+    if (baseUrlObj.hostname !== currentUrlObj.hostname) {
+      // If not, just return
+      return;
+    }
+
+    // Get normalized version of currentURL
+    const normalizedURL = normalizeURL(currentURL);
+
+    // Call addPageVisit method
+    const isNewPage = this.addPageVisit(normalizedURL);
+    // If it is not a new page return early
+    if (!isNewPage) {
+      return;
+    }
+
+    // Get the HTML from the current URL and print it
+    const html = await this.getHTML(currentURL);
+
+    if (!html) {
+      console.error(`Could not fetch html from ${currentURL}`);
+      return;
+    }
+
+    console.log(html);
+
+    // get all the URLs from the response body HTML
+    const nextUrls = getURLsFromHTML(html, this.baseURL);
+
+    // Create an array of promises for each URL by calling this.crawlPage(nextURL)
+    const promises = nextUrls.map(async (nextUrl) => {
+      await this.crawlPage(nextUrl);
     });
 
-    // If the HTTP status code is an error-level code (400+), print an error and return
-    if (response.status >= 400) {
-      console.error(
-        `Got HTTP error: ${response.status} ${response.statusText}`,
-      );
-      return;
-    }
+    await Promise.all(promises);
+  }
 
-    // If the response content-type header is not text/html print an error and return
-    const contentType = response.headers.get("content-type");
-    if (!contentType || !contentType.includes("text/html")) {
-      console.error(`Got non-HTML response: ${contentType}`);
-      return;
-    }
-
-    const htmlText = await response.text();
-
-    // Extract just the body content
-    const dom = new JSDOM(htmlText);
-    const body = dom.window.document.body;
-
-    return body ? body.outerHTML : htmlText;
-  } catch (error) {
-    console.error("Fetch failed:", (error as Error).message);
-    return;
+  async crawl() {
+    await this.crawlPage(this.baseURL);
+    return this.pages;
   }
 }
 
-export async function crawlPage(
-  baseURL: string, // root URL of the website we're crawling
-  currentURL: string = baseURL, // current URL we are crawling
-  pages: Record<string, number> = {}, // object used to keep track of the number of times we've seen each internal link
+export async function crawlSiteAsync(
+  baseURL: string,
+  maxConcurrency: number = 5,
 ) {
-  // Make sure the currentURL is on the same domain as the baseURL
-  const baseUrlObj = new URL(baseURL);
-  const currentUrlObj = new URL(currentURL);
-  if (baseUrlObj.hostname !== currentUrlObj.hostname) {
-    // If not, just return the current pages
-    return pages;
-  }
-
-  // Get normalized version of currentURL
-  const normalizedCurrentURL = normalizeURL(currentURL);
-
-  // If the pages object already has an entry for the normalized version of the current URL
-  if (normalizedCurrentURL in pages) {
-    // just increment the count and return the current pages
-    pages[normalizedCurrentURL]++;
-    return pages;
-  }
-  // Otherwise, add an entry to the pages object for the normalized version of the current URL, and set the count to 1
-  pages[normalizedCurrentURL] = 1;
-
-  // Get the HTML from the current URL and print it
-  const html = await getHTML(currentURL);
-
-  if (!html) {
-    console.error(`Could not fetch html from ${currentURL}`);
-    return pages;
-  }
-
-  console.log(html);
-
-  // get all the URLs from the response body HTML
-  const allUrls = getURLsFromHTML(html, baseURL);
-
-  // Recursively crawl each URL you found on the page and update the pages to keep an aggregate count
-  for (const url of allUrls) {
-    pages = await crawlPage(baseURL, url, pages);
-  }
+  const crawlerInstance = new ConcurrentCrawler(baseURL, maxConcurrency);
+  const pages = await crawlerInstance.crawl();
 
   return pages;
 }
