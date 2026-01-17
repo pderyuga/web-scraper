@@ -109,13 +109,37 @@ class ConcurrentCrawler {
   pages: Record<string, number>;
   limit: LimitFunction;
 
-  constructor(baseURL: string, maxConcurrency: number) {
+  maxPages: number;
+  shouldStop = false;
+  allTasks = new Set<Promise<void>>();
+  abortController = new AbortController();
+
+  constructor(baseURL: string, maxConcurrency: number, maxPages: number) {
     this.baseURL = baseURL;
     this.pages = {};
     this.limit = pLimit(maxConcurrency);
+    this.maxPages = Math.max(1, maxPages);
   }
 
   private addPageVisit(normalizedURL: string): boolean {
+    // Check if shouldStop is already true
+    if (this.shouldStop) {
+      // return false immediately if so
+      return false;
+    }
+
+    // Check if the number of unique pages visited has reached maxPages
+    if (Object.keys(this.pages).length >= this.maxPages) {
+      // Set shouldStop to true
+      this.shouldStop = true;
+      // Print message
+      console.log("Reached maximum number of pages to crawl.");
+      // Call this.abortController.abort() to cancel any in-flight fetch requests
+      this.abortController.abort();
+      // Return false
+      return false;
+    }
+
     // If the pages object already has an entry for the normalized version of the current URL
     if (normalizedURL in this.pages) {
       // increment the count
@@ -140,8 +164,14 @@ class ConcurrentCrawler {
           headers: {
             "User-Agent": "BootCrawler/1.0",
           },
+          signal: this.abortController.signal,
         });
       } catch (err) {
+        if ((err as Error).name === "AbortError") {
+          // Request was aborted, this is expected when maxPages is reached
+          console.error("Fetch aborted");
+          process.exit(0);
+        }
         throw new Error(`Got Network error: ${(err as Error).message}`);
       }
 
@@ -167,6 +197,12 @@ class ConcurrentCrawler {
   }
 
   private async crawlPage(currentURL: string): Promise<void> {
+    // check shouldStop at the very beginning
+    if (this.shouldStop) {
+      // return immediately if it’s true
+      return;
+    }
+
     // Make sure the currentURL is on the same domain as the baseURL
     const baseUrlObj = new URL(this.baseURL);
     const currentUrlObj = new URL(currentURL);
@@ -199,8 +235,19 @@ class ConcurrentCrawler {
     const nextUrls = getURLsFromHTML(html, this.baseURL);
 
     // Create an array of promises for each URL by calling this.crawlPage(nextURL)
-    const promises = nextUrls.map(async (nextUrl) => {
-      await this.crawlPage(nextUrl);
+    const promises = nextUrls.map((nextUrl) => {
+      // Create the crawl task
+      const task = this.crawlPage(nextUrl);
+
+      // Add to tracking set
+      this.allTasks.add(task);
+
+      // Remove from set when complete (success or failure)
+      task.finally(() => {
+        this.allTasks.delete(task);
+      });
+
+      return task;
     });
 
     await Promise.all(promises);
@@ -215,8 +262,13 @@ class ConcurrentCrawler {
 export async function crawlSiteAsync(
   baseURL: string,
   maxConcurrency: number = 5,
+  maxPages: number = 20,
 ) {
-  const crawlerInstance = new ConcurrentCrawler(baseURL, maxConcurrency);
+  const crawlerInstance = new ConcurrentCrawler(
+    baseURL,
+    maxConcurrency,
+    maxPages,
+  );
   const pages = await crawlerInstance.crawl();
 
   return pages;
