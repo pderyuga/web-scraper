@@ -5,6 +5,7 @@ import {
   getFirstParagraphFromHTML,
   getURLsFromHTML,
   getImagesFromHTML,
+  extractPageData,
 } from "./crawl";
 
 describe("normalizeURL", () => {
@@ -189,6 +190,97 @@ describe("getImagesFromHTML", () => {
 
     const actual = getImagesFromHTML(inputBody, inputURL);
     const expected: string[] = [];
+
+    expect(actual).toEqual(expected);
+  });
+});
+
+describe("extractPageData", () => {
+  it("should extract basic page data", () => {
+    const inputURL = "https://blog.boot.dev";
+    const inputBody = `
+    <html><body>
+      <h1>Test Title</h1>
+      <p>This is the first paragraph.</p>
+      <a href="/link1">Link 1</a>
+      <img src="/image1.jpg" alt="Image 1">
+    </body></html>
+  `;
+
+    const actual = extractPageData(inputBody, inputURL);
+    const expected = {
+      url: "https://blog.boot.dev",
+      h1: "Test Title",
+      firstParagraph: "This is the first paragraph.",
+      outgoingLinks: ["https://blog.boot.dev/link1"],
+      imageURLs: ["https://blog.boot.dev/image1.jpg"],
+    };
+
+    expect(actual).toEqual(expected);
+  });
+
+  it("should handle empty HTML with no extractable content", () => {
+    const inputURL = "https://example.com";
+    const inputBody = `<html><body></body></html>`;
+
+    const actual = extractPageData(inputBody, inputURL);
+    const expected = {
+      url: "https://example.com",
+      h1: "",
+      firstParagraph: "",
+      outgoingLinks: [],
+      imageURLs: [],
+    };
+
+    expect(actual).toEqual(expected);
+  });
+
+  it("should handle mixed valid and invalid elements", () => {
+    const inputURL = "https://blog.boot.dev";
+    const inputBody = `
+    <html><body>
+      <h1>Blog Post</h1>
+      <p>Introduction text.</p>
+      <a href="/valid-link">Valid Link</a>
+      <a>Invalid Link without href</a>
+      <img src="/valid-image.png" alt="Valid">
+      <img alt="Invalid without src">
+    </body></html>
+  `;
+
+    const actual = extractPageData(inputBody, inputURL);
+    const expected = {
+      url: "https://blog.boot.dev",
+      h1: "Blog Post",
+      firstParagraph: "Introduction text.",
+      outgoingLinks: ["https://blog.boot.dev/valid-link"],
+      imageURLs: ["https://blog.boot.dev/valid-image.png"],
+    };
+
+    expect(actual).toEqual(expected);
+  });
+
+  it("should handle page with only some content types", () => {
+    const inputURL = "https://example.com/page";
+    const inputBody = `
+    <html><body>
+      <h1>Only Title and Links</h1>
+      <a href="/link1">Link 1</a>
+      <a href="/link2">Link 2</a>
+    </body></html>
+  `;
+
+    const actual = extractPageData(inputBody, inputURL);
+    const expected = {
+      url: "https://example.com/page",
+      h1: "Only Title and Links",
+      firstParagraph: "",
+      outgoingLinks: [
+        "https://example.com/link1",
+        "https://example.com/link2",
+      ],
+      imageURLs: [],
+    };
 
     expect(actual).toEqual(expected);
   });

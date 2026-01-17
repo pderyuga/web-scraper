@@ -76,3 +76,29 @@ export function getImagesFromHTML(html: string, baseURL: string): string[] {
 
   return images;
 }
+
+export type ExtractedPageData = {
+  url: string;
+  h1: string;
+  firstParagraph: string;
+  outgoingLinks: string[];
+  imageURLs: string[];
+};
+
+export function extractPageData(
+  html: string,
+  pageURL: string,
+): ExtractedPageData {
+  const h1 = getH1FromHTML(html);
+  const firstParagraph = getFirstParagraphFromHTML(html);
+  const outgoingLinks = getURLsFromHTML(html, pageURL);
+  const imageURLs = getImagesFromHTML(html, pageURL);
+
+  return {
+    url: pageURL,
+    h1,
+    firstParagraph,
+    outgoingLinks,
+    imageURLs,
+  };
+}
