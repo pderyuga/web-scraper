@@ -102,3 +102,42 @@ export function extractPageData(
     imageURLs,
   };
 }
+
+export async function getHTML(url: string) {
+  console.log(`Crawling ${url}...`);
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "User-Agent": "BootCrawler/1.0",
+      },
+    });
+
+    // If the HTTP status code is an error-level code (400+), print an error and return
+    if (response.status >= 400) {
+      console.error(
+        `Got HTTP error: ${response.status} ${response.statusText}`,
+      );
+      return;
+    }
+
+    // If the response content-type header is not text/html print an error and return
+    const contentType = response.headers.get("content-type");
+    if (!contentType || !contentType.includes("text/html")) {
+      console.error(`Got non-HTML response: ${contentType}`);
+      return;
+    }
+
+    const htmlText = await response.text();
+
+    // Extract just the body content
+    const dom = new JSDOM(htmlText);
+    const body = dom.window.document.body;
+
+    return body ? body.outerHTML : htmlText;
+  } catch (error) {
+    console.error("Fetch failed:", (error as Error).message);
+    return;
+  }
+}
