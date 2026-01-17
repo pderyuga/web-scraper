@@ -1,3 +1,5 @@
+import { JSDOM } from "jsdom";
+
 export function normalizeURL(url: string): string {
   const urlObj = new URL(url);
 
@@ -24,4 +26,19 @@ export function normalizeURL(url: string): string {
   urlString = urlString.replace(/^(http:)?\/\//, "");
 
   return urlString;
+}
+
+export function getH1FromHTML(html: string): string {
+  const dom = new JSDOM(html);
+  const h1 = dom.window.document.querySelector("h1");
+  return h1?.textContent.trim() ?? "";
+}
+
+export function getFirstParagraphFromHTML(html: string): string {
+  const dom = new JSDOM(html);
+  const document = dom.window.document;
+  const main = document.querySelector("main");
+  const paragraph = main?.querySelector("p") ?? document.querySelector("p");
+  const firstParagraph = paragraph?.textContent.trim() ?? "";
+  return firstParagraph;
 }

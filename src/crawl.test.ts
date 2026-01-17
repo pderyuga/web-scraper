@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { normalizeURL } from "./crawl";
+import {
+  normalizeURL,
+  getH1FromHTML,
+  getFirstParagraphFromHTML,
+} from "./crawl";
 
-describe("add function", () => {
+describe("normalizeURL", () => {
   it("should normalize basic urls", () => {
     const expected = "blog.boot.dev/path";
     expect(normalizeURL("https://blog.boot.dev/path/")).toBe(expected);
@@ -38,5 +42,63 @@ describe("add function", () => {
     expect(normalizeURL("data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==")).toBe(
       "data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==",
     );
+  });
+});
+
+describe("getH1FromHTML", () => {
+  it("returns first h1 heading from html", () => {
+    const inputBody = `<html><body><h1>Test Title</h1></body></html>`;
+    const actual = getH1FromHTML(inputBody);
+    const expected = "Test Title";
+    expect(actual).toEqual(expected);
+  });
+
+  it("returns first h1 heading if multiple h1 headings exist", () => {
+    const inputBody = `<html><body><h1>Test Title 1</h1><h1>Test Title 2</h1></body></html>`;
+    const actual = getH1FromHTML(inputBody);
+    const expected = "Test Title 1";
+    expect(actual).toEqual(expected);
+  });
+
+  it("returns empty string if no heading is found", () => {
+    const inputBody = `<html><body><p>This is a paragraph</p></body></html>`;
+    const actual = getH1FromHTML(inputBody);
+    const expected = "";
+    expect(actual).toEqual(expected);
+  });
+});
+
+describe("getFirstParagraphFromHTML", () => {
+  it("returns first paragraph inside main, if it exists", () => {
+    const inputBody = `
+    <html><body>
+      <p>Outside paragraph.</p>
+      <main>
+        <p>Main paragraph.</p>
+      </main>
+    </body></html>
+  `;
+    const actual = getFirstParagraphFromHTML(inputBody);
+    const expected = "Main paragraph.";
+    expect(actual).toEqual(expected);
+  });
+
+  it("falls back to first outside paragraph", () => {
+    const inputBody = `
+    <html><body>
+      <p>Outside paragraph 1.</p>
+      <p>Outside paragraph 2.</p>
+    </body></html>
+  `;
+    const actual = getFirstParagraphFromHTML(inputBody);
+    const expected = "Outside paragraph 1.";
+    expect(actual).toEqual(expected);
+  });
+
+  it("returns empty string if no parahraph is found", () => {
+    const inputBody = `<html><body><h1>Test Title</h1></body></html>`;
+    const actual = getFirstParagraphFromHTML(inputBody);
+    const expected = "";
+    expect(actual).toEqual(expected);
   });
 });
