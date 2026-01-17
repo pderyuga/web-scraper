@@ -141,3 +141,49 @@ export async function getHTML(url: string) {
     return;
   }
 }
+
+export async function crawlPage(
+  baseURL: string, // root URL of the website we're crawling
+  currentURL: string = baseURL, // current URL we are crawling
+  pages: Record<string, number> = {}, // object used to keep track of the number of times we've seen each internal link
+) {
+  // Make sure the currentURL is on the same domain as the baseURL
+  const baseUrlObj = new URL(baseURL);
+  const currentUrlObj = new URL(currentURL);
+  if (baseUrlObj.hostname !== currentUrlObj.hostname) {
+    // If not, just return the current pages
+    return pages;
+  }
+
+  // Get normalized version of currentURL
+  const normalizedCurrentURL = normalizeURL(currentURL);
+
+  // If the pages object already has an entry for the normalized version of the current URL
+  if (normalizedCurrentURL in pages) {
+    // just increment the count and return the current pages
+    pages[normalizedCurrentURL]++;
+    return pages;
+  }
+  // Otherwise, add an entry to the pages object for the normalized version of the current URL, and set the count to 1
+  pages[normalizedCurrentURL] = 1;
+
+  // Get the HTML from the current URL and print it
+  const html = await getHTML(currentURL);
+
+  if (!html) {
+    console.error(`Could not fetch html from ${currentURL}`);
+    return pages;
+  }
+
+  console.log(html);
+
+  // get all the URLs from the response body HTML
+  const allUrls = getURLsFromHTML(html, baseURL);
+
+  // Recursively crawl each URL you found on the page and update the pages to keep an aggregate count
+  for (const url of allUrls) {
+    pages = await crawlPage(baseURL, url, pages);
+  }
+
+  return pages;
+}
