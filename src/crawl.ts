@@ -136,9 +136,7 @@ class ConcurrentCrawler {
       this.shouldStop = true;
       // Print message
       console.log("Reached maximum number of pages to crawl.");
-      // Call this.abortController.abort() to cancel any in-flight fetch requests
-      this.abortController.abort();
-      // Return false
+      // Return false - don't abort in-flight requests, let them complete
       return false;
     }
 
@@ -203,20 +201,20 @@ class ConcurrentCrawler {
     // Get the HTML from the current URL and print it
     let html = "";
     try {
-      const html = await this.getHTML(currentURL);
+      html = await this.getHTML(currentURL);
     } catch (err) {
       console.log(`${(err as Error).message}`);
       return;
     }
 
+    // Extract page data and store it immediately after successful fetch
+    const pageData = extractPageData(html, currentURL);
+    this.pages[normalizedURL] = pageData;
+
     // Don't create child tasks if we should stop
     if (this.shouldStop) {
       return;
     }
-
-    // Extract page data and store it
-    const pageData = extractPageData(html, currentURL);
-    this.pages[normalizedURL] = pageData;
 
     // get all the URLs from the response body HTML
     const nextUrls = pageData.outgoingLinks;
