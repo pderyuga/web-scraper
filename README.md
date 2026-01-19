@@ -1,4 +1,4 @@
-# Web Scraper
+# Web Scraper 🕷
 
 A TypeScript-based web crawler that extracts structured data from a website and generates a CSV report.
 
