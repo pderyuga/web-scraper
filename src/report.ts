@@ -2,9 +2,19 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { ExtractedPageData } from "./crawl";
 
+export const DEFAULT_REPORT_NAME = "report.csv";
+
+// Helper function to escape CSV fields (quotes, commas, newlines) before joining with commas
+function csvEscape(field: string) {
+  const str = field ?? "";
+  const needsQuoting = /[",\n]/.test(str);
+  const escaped = str.replace(/"/g, '""');
+  return needsQuoting ? `"${escaped}"` : escaped;
+}
+
 export function writeCSVReport(
   pageData: Record<string, ExtractedPageData>, // object returned by crawler
-  filename = "report.csv", // csv file to create
+  filename = DEFAULT_REPORT_NAME, // csv file to create
 ): void {
   if (!pageData || Object.keys(pageData).length === 0) {
     console.log("No data to write to CSV");
@@ -25,8 +35,8 @@ export function writeCSVReport(
     const url = csvEscape(page.url);
     const h1 = csvEscape(page.h1);
     const firstParagraph = csvEscape(page.firstParagraph);
-    const outgoingLinks = page.outgoingLinks.join("; ");
-    const imageUrls = page.imageURLs.join("; ");
+    const outgoingLinks = csvEscape(page.outgoingLinks.join("; "));
+    const imageUrls = csvEscape(page.imageURLs.join("; "));
     const row = [url, h1, firstParagraph, outgoingLinks, imageUrls];
     const csvRow = row.join(",");
     content.push(csvRow);
@@ -43,12 +53,4 @@ export function writeCSVReport(
   } catch (err) {
     console.error("Error writing CSV file:", err);
   }
-}
-
-// Helper function to escape CSV fields (quotes, commas, newlines) before joining with commas
-function csvEscape(field: string) {
-  const str = field ?? "";
-  const needsQuoting = /[",\n]/.test(str);
-  const escaped = str.replace(/"/g, '""');
-  return needsQuoting ? `"${escaped}"` : escaped;
 }

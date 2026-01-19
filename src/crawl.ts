@@ -105,14 +105,16 @@ export function extractPageData(
 }
 
 class ConcurrentCrawler {
-  baseURL: string;
-  pages: Record<string, ExtractedPageData>;
-  limit: LimitFunction;
+  private baseURL: string;
+  private pages: Record<string, ExtractedPageData>;
+  private limit: LimitFunction;
 
-  maxPages: number;
-  shouldStop = false;
-  allTasks = new Set<Promise<void>>();
-  abortController = new AbortController();
+  private maxPages: number;
+  private shouldStop = false;
+  private allTasks = new Set<Promise<void>>();
+  private abortController = new AbortController();
+
+  private visited = new Set<string>();
 
   constructor(baseURL: string, maxConcurrency: number, maxPages: number) {
     this.baseURL = baseURL;
@@ -122,14 +124,14 @@ class ConcurrentCrawler {
   }
 
   private addPageVisit(normalizedURL: string): boolean {
-    // Check if shouldStop is already true
-    if (this.shouldStop) {
+    // Check if shouldStop is already true or the page has already been visited
+    if (this.shouldStop || this.visited.has(normalizedURL)) {
       // return false immediately if so
       return false;
     }
 
     // Check if the number of unique pages visited has reached maxPages
-    if (Object.keys(this.pages).length >= this.maxPages) {
+    if (this.visited.size >= this.maxPages) {
       // Set shouldStop to true
       this.shouldStop = true;
       // Print message
@@ -140,22 +142,14 @@ class ConcurrentCrawler {
       return false;
     }
 
-    // If the pages object already has an entry for the normalized version of the current URL
-    if (normalizedURL in this.pages) {
-      // return false, already visited
-      return false;
-    }
-    // Otherwise, return true
+    // Otherwise, keep track of page visit and return true
+    this.visited.add(normalizedURL);
+
     return true;
   }
 
   private async getHTML(currentURL: string): Promise<string> {
     console.log(`Crawling ${currentURL}...`);
-
-    // Check shouldStop before even queuing the fetch
-    if (this.shouldStop) {
-      return "";
-    }
 
     return await this.limit(async () => {
       const response = await fetch(currentURL, {
@@ -177,13 +171,7 @@ class ConcurrentCrawler {
         throw new Error(`Got non-HTML response: ${contentType}`);
       }
 
-      const htmlText = await response.text();
-
-      // Extract just the body content
-      const dom = new JSDOM(htmlText);
-      const body = dom.window.document.body;
-
-      return body ? body.outerHTML : htmlText;
+      return response.text();
     });
   }
 
@@ -213,10 +201,11 @@ class ConcurrentCrawler {
     }
 
     // Get the HTML from the current URL and print it
-    const html = await this.getHTML(currentURL);
-
-    if (!html) {
-      console.error(`Could not fetch html from ${currentURL}`);
+    let html = "";
+    try {
+      const html = await this.getHTML(currentURL);
+    } catch (err) {
+      console.log(`${(err as Error).message}`);
       return;
     }
 
@@ -233,10 +222,11 @@ class ConcurrentCrawler {
     const nextUrls = pageData.outgoingLinks;
 
     // Create an array of promises for each URL by calling this.crawlPage(nextURL)
-    const promises = nextUrls.map((nextUrl) => {
+    const promises: Promise<void>[] = [];
+    for (const nextUrl of nextUrls) {
       // Don't create crawl task if we should stop
       if (this.shouldStop) {
-        return;
+        break;
       }
 
       // Create the crawl task
@@ -249,14 +239,13 @@ class ConcurrentCrawler {
       task.finally(() => {
         this.allTasks.delete(task);
       });
-
-      return task;
-    });
+      promises.push(task);
+    }
 
     await Promise.all(promises);
   }
 
-  async crawl() {
+  async crawl(): Promise<Record<string, ExtractedPageData>> {
     const rootTask = this.crawlPage(this.baseURL);
     this.allTasks.add(rootTask);
     try {
@@ -278,7 +267,7 @@ export async function crawlSiteAsync(
   baseURL: string,
   maxConcurrency: number = 5,
   maxPages: number = 20,
-) {
+): Promise<Record<string, ExtractedPageData>> {
   const crawlerInstance = new ConcurrentCrawler(
     baseURL,
     maxConcurrency,
